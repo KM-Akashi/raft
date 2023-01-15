@@ -1,6 +1,6 @@
 package raft.core
 
-import raft.common.{AppendEntriesMessage, RaftNodeState, RaftPeerState, RequestVoteMessage}
+import raft.common.{AppendEntriesMessage, RaftHeartbeat, RaftLogEntry, RaftNodeState, RaftPeerState, RequestVoteMessage}
 
 import scala.collection.mutable
 import scala.concurrent.duration.Deadline
@@ -12,12 +12,12 @@ class RaftCore[A,B](val nodeId: String)
     with RaftTimer(150,300):
 
 
-  val follower: RaftState[A,B] = new RaftFollowerState(this)
-  val candidate: RaftState[A,B] = new RaftCandidateState(this)
-  val leader: RaftState[A,B] = new RaftLeaderState(this)
+  private val follower: RaftState[A,B] = new RaftFollowerState(this)
+  private val candidate: RaftState[A,B] = new RaftCandidateState(this)
+  private val leader: RaftState[A,B] = new RaftLeaderState(this)
   var state: RaftState[A,B] = follower
 
-  def poll(): Unit =
+  private def poll(): Unit =
     if isTimeout then
       state.timeOut()
     Thread.sleep(1)
@@ -26,7 +26,22 @@ class RaftCore[A,B](val nodeId: String)
   def appendEntries(message: AppendEntriesMessage[A,B]): (Int, Boolean) = state.appendEntries(message)
 
   def getRequestVoteMessage: RequestVoteMessage =
-    RequestVoteMessage(nodeState.currentTerm,nodeState.nodeId, nodeState.commitIndex, if nodeState.logs.nonEmpty then nodeState.logs(nodeState.commitIndex.toInt).term else 0)
+    RequestVoteMessage(
+      nodeState.currentTerm,
+      nodeId,
+      ???,
+      ???
+    )
+
+  def getAppendEntriesMessage(forPeerId: String):AppendEntriesMessage[A, B] =
+    AppendEntriesMessage(
+      nodeState.currentTerm,
+      nodeId,
+      peerStates(forPeerId).nextIndex - 1,
+      nodeState.logs.last.term,
+      nodeState.logs.slice(peerStates(forPeerId).nextIndex, nodeState.commitIndex),
+      nodeState.commitIndex
+    )
 
   def asFollower(): Unit =
     state = follower
@@ -35,10 +50,14 @@ class RaftCore[A,B](val nodeId: String)
     nodeState.currentTerm += 1
     nodeState.votedFor = Some(nodeId)
     state = candidate
-    //println(s"\n${state.showState()} become Candidate")
     state.election()
 
   def asLeader(): Unit =
     state = leader
+    reinitializedPeerStates()
+
+  def request(key :A, value: B): Unit =
+    nodeState.addNewLog(key, value)
+    ???
 
   override def run(): Unit = while true do poll()

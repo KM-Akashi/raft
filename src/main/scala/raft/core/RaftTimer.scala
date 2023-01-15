@@ -8,7 +8,7 @@ trait RaftTimer(origin:Int, bound:Int) {
   private val random: Random = new Random()
   private var fetchTime: Deadline = getRandomTimeoutDuration.fromNow
 
-  private def getRandomTimeoutDuration: FiniteDuration = (random.nextInt(bound - origin) + origin).milliseconds
+  private def getRandomTimeoutDuration: FiniteDuration = random.between(origin, bound).milliseconds
   private def getHeartbeatDuration: FiniteDuration = (origin/10).milliseconds
 
   def isTimeout: Boolean = fetchTime.isOverdue
